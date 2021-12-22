@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ScalaCompilerConfiguration">
-    <profile name="sbt 1" modules="scala-problems-interviews" />
+    <profile name="sbt 1" modules="scala-problems-interviews,scala-problems-interviews_3615,scala-problems-interviews_8579" />
   </component>
 </project>
