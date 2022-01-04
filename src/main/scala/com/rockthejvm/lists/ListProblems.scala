@@ -1,8 +1,7 @@
 package com.rockthejvm.lists
 
-import jdk.nashorn.internal.ir.JoinPredecessor
-
 import scala.annotation.tailrec
+import scala.util.Random
 
 sealed abstract class RList[+T] {
 
@@ -33,6 +32,13 @@ sealed abstract class RList[+T] {
   def filter(f: T => Boolean): RList[T]
 
   def rle: RList[(T, Int)]
+
+  def duplicateEach(k: Int): RList[T]
+
+  def rotate(k: Int): RList[T]
+
+  // random sample
+  def sample(k: Int): RList[T]
 }
 
 case object RNil extends RList[Nothing] {
@@ -64,6 +70,12 @@ case object RNil extends RList[Nothing] {
   // Medium difficulty
 
   override def rle: RList[(Nothing, Int)] = RNil
+
+  override def duplicateEach(k: Int): RList[Nothing] = RNil
+
+  override def rotate(k: Int): RList[Nothing] = RNil
+
+  override def sample(k: Int): RList[Nothing] = RNil
 }
 
 // Cons ==  old name for Constructor
@@ -128,6 +140,7 @@ case class ::[+T](override val head: T, override val tail: RList[T]) extends RLi
 
   override def ++[S >: T](anotherList: RList[S]): RList[S] = { //type S is used throughout
 
+    @tailrec
     def concatTailRec(remainingList: RList[S], acc: RList[S]): RList[S] = {
       if (remainingList.isEmpty) acc
       else concatTailRec(remainingList.tail, remainingList.head :: acc)
@@ -138,7 +151,7 @@ case class ::[+T](override val head: T, override val tail: RList[T]) extends RLi
 
   override def removeAt(index: Int): RList[T] = {
 
-    /* for index to remove at = 2, then we this is the algo
+    /* for index to remove at = 2, below is the algo of how the tailRec will evaluate
     [1,2,3,4,5].remove(2) = removeAtTailRec([1,2,3,4,5], 0, [])
     = removeAtTailRec([2,3,4,5], 1, [1])
     = removeAtTailRec([3,4,5], 2, [2,1])
@@ -176,6 +189,7 @@ case class ::[+T](override val head: T, override val tail: RList[T]) extends RLi
   }
 
   override def flatMap[S](f: T => RList[S]): RList[S] = {
+
     @tailrec
     def flatMapTailRec(remainingList: RList[T], acc: RList[S]): RList[S] = {
       /*
@@ -235,6 +249,106 @@ case class ::[+T](override val head: T, override val tail: RList[T]) extends RLi
 
     rleTailRec(this.tail, (this.head, 1), RNil).reverse
   }
+
+  //  override def duplicateEach(k: Int): RList[T] = {
+  //
+  //    /* My implementation
+  //     [1,2,3,4,5].duplicate(3)
+  //     = duplicateTailRec([1,2,3,4,5], (1,0), [])
+  //     = duplicateTailRec([1,2,3,4,5], (1,1), [1])
+  //     = duplicateTailRec([1,2,3,4,5], (1,2), [1,1])
+  //     = duplicateTailRec([1,2,3,4,5], (1,3), [1,1,1])
+  //     = duplicateTailRec([2,3,4,5], (2,0), [1,1,1])
+  //     = duplicateTailRec([2,3,4,5], (2,1), [2,1,1,1])
+  //     = duplicateTailRec([2,3,4,5], (2,2), [2,2,1,1,1])
+  //     = duplicateTailRec([2,3,4,5], (2,3), [2,2,2,1,1,1])
+  //     = duplicateTailRec([3,4,5], (3,0), [2,2,2,1,1,1])
+  //     = duplicateTailRec([3,4,5], (3,1), [3,2,2,2,1,1,1])
+  //     = duplicateTailRec([3,4,5], (3,2), [3,3,2,2,2,1,1,1])
+  //     = duplicateTailRec([3,4,5], (3,3), [3,3,3,2,2,2,1,1,1])
+  //     = ...
+  //     = [5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1].reverse
+  //     = [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5]
+  //     Complexity = O(N)
+  //    */
+  //
+  //    @tailrec
+  //    def duplicateTailRec(remainingList: RList[T], counter: (T, Int), acc: RList[T]): RList[T] = {
+  //      if (remainingList.isEmpty && counter._2 == 0) acc
+  //      else if (remainingList.isEmpty) acc
+  //      else if (counter._2 != k) {
+  //        duplicateTailRec(remainingList, counter.copy(_1 = remainingList.head, _2 = counter._2 + 1), remainingList.head :: acc)
+  //      }
+  //      else {
+  //        duplicateTailRec(remainingList.tail, (remainingList.head, 0), acc)
+  //      }
+  //    }
+  //
+  //    duplicateTailRec(this, (this.head, 0), RNil).reverse
+  //  }
+
+  override def duplicateEach(k: Int): RList[T] = {
+
+    @tailrec
+    def duplicateTailRec(remaining: RList[T], currentElement: T, nDuplications: Int, acc: RList[T]): RList[T] = {
+      if (remaining.isEmpty && nDuplications == k) acc
+      else if (remaining.isEmpty) duplicateTailRec(remaining, currentElement, nDuplications + 1, currentElement :: acc)
+      else if (nDuplications == k) duplicateTailRec(remaining.tail, remaining.head, 0, acc)
+      else duplicateTailRec(remaining, currentElement, nDuplications + 1, currentElement :: acc)
+    }
+
+    duplicateTailRec(this.tail, this.head, 0, RNil).reverse
+  }
+
+  override def rotate(k: Int): RList[T] = {
+    def rotateTailRec(remainingList: RList[T], counter: Int, acc: RList[T]): RList[T] = {
+      if (remainingList.isEmpty && counter == 0) this
+      else if (remainingList.isEmpty) rotateTailRec(this, counter, RNil)
+      else if (counter == 0) remainingList ++ acc.reverse
+      else rotateTailRec(remainingList.tail, counter - 1, remainingList.head :: acc)
+    }
+
+    rotateTailRec(this, k, RNil)
+  }
+
+  override def sample(k: Int): RList[T] = {
+
+    val randomNumber = new Random(System.currentTimeMillis())
+    val maxIndex = this.length
+
+    // Complexity O(N * k)
+    def sampleTailRec(nRemaining: Int, acc: RList[T]): RList[T] = {
+
+      if (nRemaining == 0) acc.reverse
+      else {
+        val index = randomNumber.nextInt(maxIndex)
+        val newNumber = this.apply(index)
+        sampleTailRec(nRemaining - 1, newNumber :: acc)
+      }
+    }
+
+    def sampleElegant: RList[T] =
+      RList.from((1 to k).map { _ => randomNumber.nextInt(maxIndex)
+      }.map { index => this (index) })
+
+    def sampleElegantLens: RList[T] = {
+      val genSeq: Seq[Int] = (1 to k)   // gens up to k to determine number of elems to sample from original list
+      val genSeqOfRandomIndexes: Seq[Int] = genSeq.map { _ => randomNumber.nextInt(maxIndex) }
+      // uses the range above to gen the random indexes using our "val randomNumber = new Random(System.currentTimeMillis())"  random generator to choose our random samples
+      val genFinalListOfSampledElements: Seq[T] = genSeqOfRandomIndexes.map { index => this (index) } // Gives us a Seq/Vector of Randomly sampled elems
+
+      println(genSeq)
+      println(genSeqOfRandomIndexes)
+      println(genFinalListOfSampledElements)
+
+      RList.from(genFinalListOfSampledElements) // converts the Vector type to RList type
+    }
+
+    if (k < 0) RNil
+    else sampleElegantLens //sampleTailRec(k, RNil)
+  }
+
+
 }
 
 object RList {
@@ -257,26 +371,42 @@ object ListProblems extends App {
   val aList = 1 :: 2 :: 3 :: 4 :: 5 :: 8 :: 99 :: RNil
   val aLargeList = RList.from(1 to 10000)
 
-  //  println(aSmallList)
+  def testEasyProblems = {
 
-  //  println(aSmallList.apply(0))
-  //  println(aSmallList.apply(2))
+    //  println(aSmallList)
 
-  //  println(aList.length)
-  //  println(aList.reverse)
+    //  println(aSmallList.apply(0))
+    //  println(aSmallList.apply(2))
 
-  //  println(aLargeList.apply(8735))
-  //  println(aLargeList.reverse)
-  //  println(aSmallList ++ aLargeList)
+    //  println(aList.length)
+    //  println(aList.reverse)
 
-  //  println(aList.removeAt(4)) // '5' gets removed so new list = [1,2,3,4,8,99]
-  //  println(aList.map(x => 2 * x))
+    //  println(aLargeList.apply(8735))
+    //  println(aLargeList.reverse)
+    //  println(aSmallList ++ aLargeList)
 
-  //  val time = System.currentTimeMillis()
-  //  println(aLargeList.flatMap(x => x :: (2 * x) :: RNil)) // 2.8s to evaluate so pretty bad
-  //  println(System.currentTimeMillis() - time)
+    //  println(aList.removeAt(4)) // '5' gets removed so new list = [1,2,3,4,8,99]
+    //  println(aList.map(x => 2 * x))
+
+    //  val time = System.currentTimeMillis()
+    //  println(aLargeList.flatMap(x => x :: (2 * x) :: RNil)) // 2.8s to evaluate so pretty bad
+    //  println(System.currentTimeMillis() - time)
+  }
 
   // Medium
-  val duplicatesList = 1 :: 1 :: 1 :: 2 :: 3 :: 3 :: 4 :: 5 :: 5 :: 5 :: RNil
-  println(duplicatesList.rle)
+  def testMedium = {
+
+    //    val duplicatesList: RList[Int] = 1 :: 1 :: 1 :: 2 :: 3 :: 3 :: 4 :: 5 :: 5 :: 5 :: RNil
+    //    println(duplicatesList.rle)
+    //
+    //    val aList: RList[Int] = 1 :: 2 :: 3 :: 4 :: 5 :: RNil
+    //    println(aList.duplicateEach(3))
+    //
+    val aList1To10: RList[Int] = 1 :: 2 :: 3 :: 4 :: 5 :: 6 :: 7 :: 8 :: 9 :: 10 :: RNil
+    //    println(aList1To10.rotate(3))
+
+    println(aList1To10.sample(3))
+  }
+
+  testMedium
 }
