@@ -190,6 +190,28 @@ case class ::[+T](override val head: T, override val tail: RList[T]) extends RLi
 
   override def flatMap[S](f: T => RList[S]): RList[S] = {
 
+    /*
+      [1,2,3].flatMap(x => [x, 2 * x]) = concatenateAll([1,2], [2,4], [4,6]) - this is what we want to avoid the expensive append calls, why not append everything at the end
+        instead of each intermediate i.e.[1,2], [2,4] etc.
+      therefore we will use an intermediary list of lists:
+      [1,2,3].flatMap(x => [x, 2 * x]) = concatenateAll([6,4], [4,2], [1,2]) -  we will use :: to avoid ++ concat calls, bit janky but will be better
+    */
+
+    // O(Z = dimension of the result so size of list)
+    @tailrec
+    def concatenateAll(elems: RList[RList[S]], currentList: RList[S], acc: RList[S]): RList[S] = {
+      if (currentList.isEmpty && elems.isEmpty) acc
+      else if (currentList.isEmpty) concatenateAll(elems.tail, elems.head, acc)
+      else concatenateAll(elems, currentList.tail, currentList.head :: acc)
+    }
+
+    // O(N + Z)
+    @tailrec
+    def betterFlatMap(remaining: RList[T], acculator: RList[RList[S]]): RList[S] = {
+      if (remaining.isEmpty) concatenateAll(acculator, RNil, RNil)
+      else betterFlatMap(remaining.tail, f(remaining.head).reverse :: acculator)
+    }
+
     @tailrec
     def flatMapTailRec(remainingList: RList[T], acc: RList[S]): RList[S] = {
       /*
@@ -206,9 +228,11 @@ case class ::[+T](override val head: T, override val tail: RList[T]) extends RLi
 
       if (remainingList.isEmpty) acc.reverse
       else flatMapTailRec(remainingList.tail, f(remainingList.head).reverse ++ acc)
+      // ++ concatenation calls reverse twice in it's original ++ implementation above so we end up reversing every intermediate result.
     }
 
-    flatMapTailRec(this, RNil)
+    flatMapTailRec(this, RNil) // slow - 1018 milliseconds for a 10,000 elem list where  'f = (x => 2 * x)'
+    //    betterFlatMap(this, RNil) // faster  - 6 milliseconds for a 10,000 elem list where  'f = (x => 2 * x)'
   }
 
   override def filter(predicate: T => Boolean): RList[T] = {
@@ -332,7 +356,7 @@ case class ::[+T](override val head: T, override val tail: RList[T]) extends RLi
       }.map { index => this (index) })
 
     def sampleElegantLens: RList[T] = {
-      val genSeq: Seq[Int] = (1 to k)   // gens up to k to determine number of elems to sample from original list
+      val genSeq: Seq[Int] = (1 to k) // gens up to k to determine number of elems to sample from original list
       val genSeqOfRandomIndexes: Seq[Int] = genSeq.map { _ => randomNumber.nextInt(maxIndex) }
       // uses the range above to gen the random indexes using our "val randomNumber = new Random(System.currentTimeMillis())"  random generator to choose our random samples
       val genFinalListOfSampledElements: Seq[T] = genSeqOfRandomIndexes.map { index => this (index) } // Gives us a Seq/Vector of Randomly sampled elems
@@ -388,9 +412,9 @@ object ListProblems extends App {
     //  println(aList.removeAt(4)) // '5' gets removed so new list = [1,2,3,4,8,99]
     //  println(aList.map(x => 2 * x))
 
-    //  val time = System.currentTimeMillis()
-    //  println(aLargeList.flatMap(x => x :: (2 * x) :: RNil)) // 2.8s to evaluate so pretty bad
-    //  println(System.currentTimeMillis() - time)
+    //    val time = System.currentTimeMillis()
+    //    println(aLargeList.flatMap(x => x :: (2 * x) :: RNil)) // 1018 milliseconds
+    //    println(System.currentTimeMillis() - time + " milliseconds")
   }
 
   // Medium
@@ -403,9 +427,14 @@ object ListProblems extends App {
     //    println(aList.duplicateEach(3))
     //
     val aList1To10: RList[Int] = 1 :: 2 :: 3 :: 4 :: 5 :: 6 :: 7 :: 8 :: 9 :: 10 :: RNil
-    //    println(aList1To10.rotate(3))
 
+    println(aList1To10.rotate(3))
     println(aList1To10.sample(3))
+
+    println(aSmallList.flatMap(x => x :: (2 * x) :: RNil))
+    val time = System.currentTimeMillis()
+    aLargeList.flatMap(x => x :: (2 * x) :: RNil) // 6ms to evaluate so much much better
+    println(System.currentTimeMillis() - time + " milliseconds")
   }
 
   testMedium
